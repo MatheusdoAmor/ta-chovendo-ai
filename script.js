@@ -549,6 +549,10 @@ function renderExtendedWeather() {
 function renderForecastDays(w) {
   const d = w.daily, root = $('forecast-days');
   root.replaceChildren();
+  if (!Array.isArray(d.time) || d.time.length === 0) {
+    root.textContent = 'A previsão diária não está disponível no momento. Tente atualizar em instantes.';
+    return;
+  }
   for (let i = 0; i < Math.min(3, d.time.length); i++) {
     const card = document.createElement('article');
     card.className = 'forecast-card';
@@ -566,14 +570,19 @@ function renderForecastDays(w) {
     const chance = document.createElement('span');
     chance.className = 'forecast-rain';
     const prob = getDailyRainProbability(w, i);
-    chance.textContent = prob == null ? 'Chuva: --' : `Chuva: ${Math.round(prob)}%`;
+    chance.textContent = prob == null
+      ? 'Probabilidade de chuva: indisponível'
+      : `Probabilidade de chuva: ${Math.round(prob)}%`;
     const amount = document.createElement('span');
     const mm = num(d.precipitation_sum?.[i]);
-    amount.textContent = mm == null ? '-- mm' : `${mm.toFixed(1)} mm`;
+    amount.textContent = mm == null
+      ? 'Precipitação prevista: indisponível'
+      : `Precipitação prevista: ${mm.toFixed(1)} mm`;
     meta.append(chance, amount);
     const foot = document.createElement('p');
     foot.className = 'forecast-condition';
-    foot.textContent = `Volume previsto · nascer do sol ${d.sunrise?.[i] ? d.sunrise[i].slice(11,16) : '--:--'}`;
+    const sunrise = d.sunrise?.[i] ? d.sunrise[i].slice(11,16) : null;
+    foot.textContent = sunrise ? `Nascer do sol: ${sunrise}` : 'Previsão diária';
     card.append(title, condition, temps, meta, foot);
     root.appendChild(card);
   }
