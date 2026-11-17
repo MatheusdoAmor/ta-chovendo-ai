@@ -19,6 +19,9 @@
       <symbol id="i-thermo" viewBox="0 0 24 24"><path d="M14 14.8V5a2 2 0 0 0-4 0v9.8a4 4 0 1 0 4 0z"/></symbol>
       <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
       <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"/></symbol>
+      <symbol id="i-bug" viewBox="0 0 24 24"><path d="M12 8v13M8 10h8M7 5l2 3M17 5l-2 3M5 12H3M21 12h-2M6 18l-3 2M18 18l3 2M12 8a4 4 0 0 0-4 4v5a4 4 0 0 0 8 0v-5a4 4 0 0 0-4-4z"/></symbol>
+      <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 10-13h-7l0-7z"/></symbol>
       <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
       <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17.5v.01"/></symbol>
       <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s7-6 7-11a7 7 0 0 0-14 0c0 5 7 11 7 11z"/><circle cx="12" cy="10" r="2.2"/></symbol>
@@ -78,7 +81,7 @@
             <g class="drift d1"><use class="cloud cc" href="#cloud" x="110" y="26" width="170" height="94"/></g>
             <g class="drift d4"><use class="cloud ca" href="#cloud" x="212" y="64" width="180" height="99"/></g>
             <g id="fog"><rect x="-40" y="150" width="480" height="14" rx="7"/><rect x="-60" y="176" width="480" height="14" rx="7"/><rect x="-30" y="202" width="480" height="14" rx="7"/><rect x="-50" y="228" width="480" height="14" rx="7"/></g>
-            <g id="rain"></g>
+            <g id="rain-drops"></g>
             <g id="snow"></g>
             <g id="hail"></g>
             <g id="bolt"><polygon points="0,0 -13,28 -2,28 -11,54 15,19 3,19 13,0" transform="translate(205 128)"/></g>
@@ -94,6 +97,23 @@
           <p class="feels">Sensação térmica de <strong id="feels">--</strong></p>
           <p class="updated" id="updated"></p>
           <p class="stale" id="stale" hidden role="status"></p>
+        </div>
+      </section>
+
+      <section class="recommendation-panel" id="recommendation" aria-live="polite">
+        <div class="recommendation-icon" id="recommendation-icon" aria-hidden="true">☀️</div>
+        <div><p class="recommendation-kicker">Dica para sua rotina</p><h2 id="recommendation-title">Analisando a previsão...</h2><p id="recommendation-text"></p></div>
+      </section>
+
+      <section class="rain-notice-panel" id="rain-notice" aria-live="polite">
+        <div class="rain-notice-copy">
+          <p class="recommendation-kicker">Alerta antecipado de chuva</p>
+          <h2 id="rain-notice-title">Monitorando a previsão da sua região...</h2>
+          <p id="rain-notice-text">Vamos verificar os horários com possibilidade de chuva.</p>
+        </div>
+        <div class="rain-notice-actions">
+          <button class="btn" id="btn-rain-notifications" type="button">Ativar notificações</button>
+          <p class="notification-help" id="notification-help">O navegador pedirá sua autorização. O alerta depende de o site estar aberto.</p>
         </div>
       </section>
 
@@ -119,6 +139,37 @@
           <p class="value"><span id="wind">--</span></p>
         </article>
       </section>
+
+
+      <!-- Novos recursos: previsão estendida e condições ambientais -->
+      <section class="extra-section" aria-labelledby="forecast-title">
+        <div class="section-heading"><h2 id="forecast-title">Previsão dos próximos dias</h2><p>Planeje seus próximos momentos com a previsão local.</p></div>
+        <div class="forecast-grid" id="forecast-days" aria-live="polite"></div>
+        <article class="detail-panel">
+          <div class="section-heading compact"><h2>Chance de chuva por horário</h2><p>Probabilidade e volume previsto para as próximas horas.</p></div>
+          <div id="hourly-rain" class="hourly-rain"></div>
+        </article>
+      </section>
+
+      <section class="extra-section" aria-labelledby="environment-title">
+        <div class="section-heading"><h2 id="environment-title">Condições ambientais</h2><p>Informações adicionais para cuidar da sua rotina.</p></div>
+        <div class="environment-grid">
+          <article class="stat environment-card" id="card-uv">
+            <svg class="ico"><use href="#i-sun"/></svg><h2>Índice UV</h2>
+            <p class="value" id="uv-value">--</p><p class="detail-copy" id="uv-advice">Aguardando dados.</p>
+          </article>
+          <article class="stat environment-card" id="card-mosquito">
+            <svg class="ico"><use href="#i-bug"/></svg><h2>Atividade de mosquitos</h2>
+            <p class="value" id="mosquito-value">--</p><p class="detail-copy" id="mosquito-advice">Estimativa ambiental.</p>
+          </article>
+          <article class="stat environment-card" id="card-lightning">
+            <svg class="ico"><use href="#i-bolt"/></svg><h2>Atividade de raios</h2>
+            <p class="value" id="lightning-value">--</p><p class="detail-copy" id="lightning-advice">Aguardando previsão.</p>
+          </article>
+        </div>
+        <p class="data-disclaimer">Mosquitos: estimativa baseada em condições meteorológicas, não representa contagem de insetos nem risco de doenças. Raios: a previsão de tempestades não é uma detecção de descargas elétricas em tempo real.</p>
+      </section>
+
 
       <section class="clocks" aria-label="Horários">
         <article class="clock">

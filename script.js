@@ -21,7 +21,7 @@ const state = {
   weather: null, lastOk: null, failed: false, busy: false,
   forecastAlerts: [], officialAlerts: [],
   official: { status: 'pending', checkedAt: null }, // pending | ok | error | no-coverage
-  alertSig: '', timer: null
+  alertSig: '', timer: null, notifiedRainSig: '', notificationsEnabled: false
 };
 
 /* ---------- Códigos WMO ---------- */
@@ -83,7 +83,7 @@ function buildSceneParts() {
     stars.appendChild(c);
   }
 
-  const rain = $('rain');
+  const rain = $('rain-drops');
   for (let i = 0; i < 24; i++) {
     const x = 14 + i * 16 + (i % 2) * 6, y = 130 + (i * 37) % 40;
     const l = svgEl('line', { x1: x, y1: y, x2: x - 3, y2: y + 14, class: 'drop' });
@@ -154,10 +154,10 @@ function geoErrorMessage(e) {
 /* ---------- Clima (Open-Meteo) ---------- */
 async function fetchWeather({ lat, lon }) {
   const p = new URLSearchParams({
-    latitude: lat, longitude: lon, timezone: 'auto', wind_speed_unit: 'kmh', temperature_unit: 'celsius', forecast_days: 2,
-    current: 'temperature_2m,apparent_temperature,relative_humidity_2m,is_day,weather_code,wind_speed_10m,wind_gusts_10m',
-    daily: 'temperature_2m_max,temperature_2m_min,precipitation_probability_max',
-    hourly: 'temperature_2m,apparent_temperature,precipitation,precipitation_probability,weather_code,wind_gusts_10m'
+    latitude: lat, longitude: lon, timezone: 'auto', wind_speed_unit: 'kmh', temperature_unit: 'celsius', forecast_days: 3,
+    current: 'temperature_2m,apparent_temperature,relative_humidity_2m,is_day,weather_code,wind_speed_10m,wind_gusts_10m,uv_index',
+    daily: 'temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code,precipitation_sum,uv_index_max,sunrise,sunset',
+    hourly: 'temperature_2m,apparent_temperature,precipitation,precipitation_probability,weather_code,wind_gusts_10m,relative_humidity_2m,uv_index'
   });
   const data = await fetchJson(`${CONFIG.openMeteo}?${p}`);
   if (!data || !data.current || !data.hourly) throw new Error('Resposta inesperada da API');
@@ -469,6 +469,22 @@ function tickClocks() {
   } catch (e) { $('clock-br').textContent = '--:--:--'; }
 }
 
+/* ---------- Probabilidade diária com fallback horário ---------- */
+function getDailyRainProbability(w, dayIndex) {
+  const dailyValue = num(w.daily?.precipitation_probability_max?.[dayIndex]);
+  if (dailyValue != null) return dailyValue;
+  const date = w.daily?.time?.[dayIndex];
+  if (!date || !w.hourly?.time || !w.hourly?.precipitation_probability) return null;
+  const values = [];
+  w.hourly.time.forEach((time, index) => {
+    if (time.slice(0, 10) === date) {
+      const value = num(w.hourly.precipitation_probability[index]);
+      if (value != null) values.push(value);
+    }
+  });
+  return values.length ? Math.max(...values) : null;
+}
+
 /* ---------- Renderização do clima ---------- */
 function setStat(cardId, valueId, value, text) {
   $(cardId).hidden = value == null;
@@ -493,16 +509,266 @@ function renderWeather() {
   setStat('card-minmax', 'tmin', tmin != null && tmax != null ? 1 : null, '');
   if (tmin != null && tmax != null) { $('tmin').textContent = `${Math.round(tmin)}°`; $('tmax').textContent = `${Math.round(tmax)}°`; }
 
-  const pr = d.precipitation_probability_max ? num(d.precipitation_probability_max[0]) : null;
-  setStat('card-rain', 'rain', pr, `${Math.round(pr)}%`);
+  // A API pode ocasionalmente omitir o agregado diário; nesse caso,
+  // calculamos a maior probabilidade horária correspondente ao dia local.
+  const pr = getDailyRainProbability(w, 0);
+  $('card-rain').hidden = false;
+  $('rain').textContent = pr == null ? 'Indisponível' : `${Math.round(pr)}%`;
   const hu = num(c.relative_humidity_2m);
   setStat('card-hum', 'hum', hu, `${Math.round(hu)}%`);
   const wi = num(c.wind_speed_10m), gu = num(c.wind_gusts_10m);
   setStat('card-wind', 'wind', wi, `${Math.round(wi)} km/h${gu != null && gu - wi >= 15 ? ` (rajadas de ${Math.round(gu)})` : ''}`);
 
   renderPlace();
+  renderExtendedWeather();
   renderUpdated();
   tickClocks();
+}
+
+
+/* ---------- Previsão estendida e indicadores ambientais ---------- */
+function localDayLabel(dateString, index) {
+  if (index === 0) return 'Hoje';
+  if (index === 1) return 'Amanhã';
+  if (index === 2) return 'Depois de amanhã';
+  return dateString;
+}
+
+function renderExtendedWeather() {
+  const w = state.weather;
+  if (!w || !w.daily || !w.hourly) return;
+  renderForecastDays(w);
+  renderHourlyRain(w);
+  renderUv(w);
+  renderMosquitoEstimate(w);
+  renderLightningForecast(w);
+  renderRecommendation(w);
+  renderRainNotice(w);
+}
+
+function renderForecastDays(w) {
+  const d = w.daily, root = $('forecast-days');
+  root.replaceChildren();
+  for (let i = 0; i < Math.min(3, d.time.length); i++) {
+    const card = document.createElement('article');
+    card.className = 'forecast-card';
+    const title = document.createElement('h3');
+    title.textContent = `${localDayLabel(d.time[i], i)} · ${new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', timeZone: state.tz || undefined }).format(new Date(`${d.time[i]}T12:00:00`))}`;
+    const condition = document.createElement('p');
+    condition.className = 'forecast-condition';
+    condition.textContent = describeWeather(d.weather_code?.[i]);
+    const temps = document.createElement('p');
+    temps.className = 'forecast-temps';
+    const lo = num(d.temperature_2m_min?.[i]), hi = num(d.temperature_2m_max?.[i]);
+    temps.textContent = lo == null || hi == null ? 'Temperatura indisponível' : `${Math.round(lo)}° / ${Math.round(hi)}°`;
+    const meta = document.createElement('div');
+    meta.className = 'forecast-meta';
+    const chance = document.createElement('span');
+    chance.className = 'forecast-rain';
+    const prob = getDailyRainProbability(w, i);
+    chance.textContent = prob == null ? 'Chuva: --' : `Chuva: ${Math.round(prob)}%`;
+    const amount = document.createElement('span');
+    const mm = num(d.precipitation_sum?.[i]);
+    amount.textContent = mm == null ? '-- mm' : `${mm.toFixed(1)} mm`;
+    meta.append(chance, amount);
+    const foot = document.createElement('p');
+    foot.className = 'forecast-condition';
+    foot.textContent = `Volume previsto · nascer do sol ${d.sunrise?.[i] ? d.sunrise[i].slice(11,16) : '--:--'}`;
+    card.append(title, condition, temps, meta, foot);
+    root.appendChild(card);
+  }
+}
+
+function renderHourlyRain(w) {
+  const h = w.hourly, root = $('hourly-rain');
+  root.replaceChildren();
+  const now = String(w.current.time || '').slice(0,13);
+  const indices = [];
+  h.time.forEach((t, i) => { if (t.slice(0,13) >= now && indices.length < 8) indices.push(i); });
+  if (!indices.length) {
+    root.textContent = 'Previsão horária indisponível.';
+    return;
+  }
+  indices.forEach((i) => {
+    const item = document.createElement('div');
+    item.className = 'rain-hour';
+    const time = document.createElement('span');
+    time.textContent = h.time[i].slice(11,16);
+    const percent = document.createElement('strong');
+    percent.className = 'rain-percent';
+    const p = num(h.precipitation_probability?.[i]);
+    percent.textContent = p == null ? '--' : `${Math.round(p)}%`;
+    const mm = document.createElement('span');
+    const amount = num(h.precipitation?.[i]);
+    mm.textContent = amount == null ? '-- mm' : `${amount.toFixed(1)} mm`;
+    item.append(time, percent, mm);
+    root.appendChild(item);
+  });
+}
+
+function uvDescription(value) {
+  if (value == null) return ['Indisponível', 'Não foi possível consultar o índice UV.'];
+  if (value < 3) return ['Baixo', 'Proteção solar habitual é suficiente para a maioria das pessoas.'];
+  if (value < 6) return ['Moderado', 'Procure sombra e use proteção solar, especialmente ao meio-dia.'];
+  if (value < 8) return ['Alto', 'Use protetor solar, chapéu e óculos; reduza a exposição ao sol.'];
+  if (value < 11) return ['Muito alto', 'Evite exposição prolongada e procure sombra nas horas centrais do dia.'];
+  return ['Extremo', 'Evite exposição direta ao sol; proteção reforçada é necessária.'];
+}
+
+function renderUv(w) {
+  const current = num(w.current.uv_index);
+  const hourly = w.hourly;
+  const now = String(w.current.time || '').slice(0,13);
+  let next = null;
+  hourly.time.forEach((t, i) => { if (next == null && t.slice(0,13) >= now) next = num(hourly.uv_index?.[i]); });
+  const value = current ?? next;
+  const [label, advice] = uvDescription(value);
+  $('uv-value').textContent = value == null ? 'Indisponível' : `${value.toFixed(1)} · ${label}`;
+  $('uv-advice').textContent = advice;
+}
+
+function renderMosquitoEstimate(w) {
+  const temp = num(w.current.temperature_2m);
+  const humidity = num(w.current.relative_humidity_2m);
+  const rain = num(w.daily.precipitation_sum?.[0]);
+  if (temp == null || humidity == null) {
+    $('mosquito-value').textContent = 'Indisponível';
+    $('mosquito-advice').textContent = 'Dados insuficientes para estimar as condições ambientais.';
+    return;
+  }
+  // Índice heurístico ilustrativo, não validado epidemiologicamente.
+  let score = 0;
+  if (temp >= 20 && temp <= 32) score += 2;
+  else if (temp >= 16 && temp < 20) score += 1;
+  if (humidity >= 70) score += 2;
+  else if (humidity >= 55) score += 1;
+  if (rain >= 5) score += 2;
+  else if (rain >= 1) score += 1;
+  const level = score >= 5 ? 'Muito alta' : score >= 4 ? 'Alta' : score >= 2 ? 'Moderada' : 'Baixa';
+  $('mosquito-value').textContent = level;
+  $('mosquito-advice').textContent = 'Estimativa ambiental baseada em temperatura, umidade e chuva prevista para hoje; não mede mosquitos.';
+}
+
+function renderLightningForecast(w) {
+  const codes = w.hourly.weather_code || [];
+  const times = w.hourly.time || [];
+  const now = String(w.current.time || '').slice(0,13);
+  const thunderIndices = [];
+  times.forEach((t, i) => {
+    if (t.slice(0,13) >= now && [95,96,99].includes(codes[i])) thunderIndices.push(i);
+  });
+  if (thunderIndices.length) {
+    $('lightning-value').textContent = 'Tempestade prevista';
+    $('lightning-advice').textContent = `Possibilidade de trovoadas na previsão a partir de ${times[thunderIndices[0]].slice(11,16)}. Não é detecção de raios em tempo real.`;
+  } else {
+    $('lightning-value').textContent = 'Sem tempestade prevista';
+    $('lightning-advice').textContent = 'A previsão horária não indica trovoadas no período consultado. Não há medição de descargas em tempo real.';
+  }
+}
+
+function renderRecommendation(w) {
+  const d = w.daily, h = w.hourly;
+  const codeTomorrow = num(d.weather_code?.[1]);
+  const prob = num(d.precipitation_probability_max?.[1]);
+  const rain = num(d.precipitation_sum?.[1]);
+  const uv = num(d.uv_index_max?.[1]);
+  const tomorrowCodes = [];
+  h.time.forEach((t, i) => { if (t.slice(0,10) === d.time?.[1]) tomorrowCodes.push(h.weather_code?.[i]); });
+  const storm = tomorrowCodes.some(c => [95,96,99].includes(c));
+  const officialDanger = state.officialAlerts.some(a => a.level >= 2);
+  const title = $('recommendation-title'), message = $('recommendation-text'), icon = $('recommendation-icon'), box = $('recommendation');
+  let kind = 'unstable', emoji = '🌤️', heading = 'Fique de olho no tempo!', text = 'O clima pode mudar ao longo do dia. Confira os horários com maior possibilidade de chuva antes de sair.';
+  if (storm || officialDanger) {
+    kind = 'alert'; emoji = '⛈️'; heading = 'Atenção: tempo severo!';
+    text = 'Há indicação de condições meteorológicas perigosas ou tempestades. Acompanhe os alertas oficiais e evite áreas expostas.';
+  } else if (prob != null && prob <= 20 && (rain == null || rain < 1) && ![51,53,55,61,63,65,80,81,82,95,96,99].includes(codeTomorrow)) {
+    kind = 'beach'; emoji = '🏖️'; heading = 'Dia bom para ir à praia!';
+    text = 'A previsão indica condições favoráveis e baixa chance de chuva amanhã. ' + (uv != null && uv >= 6 ? 'Atenção: o índice UV estará alto; reforce a proteção solar e evite exposição prolongada.' : 'Prepare o protetor solar e aproveite!');
+  } else if (prob != null && prob >= 70 && rain != null && rain >= 3) {
+    kind = 'home'; emoji = '🍿'; heading = 'Dia bom para ficar em casa!';
+    text = 'A previsão indica bastante chuva amanhã. Que tal preparar a pipoca, relaxar e assistir a uma Netflix?';
+  }
+  box.dataset.kind = kind; icon.textContent = emoji; title.textContent = heading; message.textContent = text;
+}
+
+function findNextRainPeriod(w) {
+  const h = w.hourly || {};
+  const now = String(w.current?.time || '').slice(0, 13);
+  for (let i = 0; i < (h.time || []).length; i++) {
+    const hour = String(h.time[i] || '').slice(0, 13);
+    if (hour < now) continue;
+    const probability = num(h.precipitation_probability?.[i]);
+    const amount = num(h.precipitation?.[i]);
+    const code = num(h.weather_code?.[i]);
+    const wetCode = [51,53,55,56,57,61,63,65,66,67,80,81,82,95,96,99].includes(code);
+    if ((probability != null && probability >= 50) || (amount != null && amount >= 0.2) || wetCode) {
+      return { index: i, time: h.time[i], probability, amount, code };
+    }
+  }
+  return null;
+}
+
+function rainLeadText(period) {
+  const when = new Date(`${period.time}:00`);
+  const label = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: state.tz || undefined }).format(when);
+  const probability = period.probability == null ? '' : ` (probabilidade de ${Math.round(period.probability)}%)`;
+  return { label, probability };
+}
+
+function renderRainNotice(w) {
+  const title = $('rain-notice-title');
+  const message = $('rain-notice-text');
+  const next = findNextRainPeriod(w);
+  if (!next) {
+    title.textContent = 'Nenhuma chuva significativa prevista nas próximas horas';
+    message.textContent = 'Continuaremos verificando a previsão nas atualizações automáticas.';
+    return;
+  }
+  const { label, probability } = rainLeadText(next);
+  title.textContent = `Possibilidade de chuva por volta das ${label}`;
+  message.textContent = `A previsão indica precipitação nesse horário${probability}. É uma estimativa horária, não um aviso de radar em tempo real.`;
+
+  // Notifica apenas se o usuário concedeu permissão e a previsão está nas próximas 12h.
+  // O navegador precisa manter esta página aberta para as verificações periódicas.
+  const currentHour = new Date(`${String(w.current.time).slice(0,13)}:00`);
+  const rainHour = new Date(`${String(next.time).slice(0,13)}:00`);
+  const hoursAhead = (rainHour - currentHour) / 3600000;
+  const signature = `${next.time}|${next.code}|${next.probability}`;
+  if (state.notificationsEnabled && 'Notification' in window && Notification.permission === 'granted' && hoursAhead >= 0 && hoursAhead <= 12 && state.notifiedRainSig !== signature) {
+    try {
+      new Notification('Tá Chovendo Aí? — Alerta de chuva', {
+        body: `Há possibilidade de chuva por volta das ${label}${probability}.`,
+        tag: 'ta-chovendo-ai-rain',
+        icon: 'favicon.svg'
+      });
+      state.notifiedRainSig = signature;
+    } catch (error) { console.warn('Não foi possível exibir a notificação:', error); }
+  }
+}
+
+async function enableRainNotifications() {
+  const help = $('notification-help');
+  if (!('Notification' in window)) {
+    help.textContent = 'Este navegador não oferece suporte a notificações. Consulte os alertas na própria página.';
+    return;
+  }
+  if (!window.isSecureContext) {
+    help.textContent = 'Notificações exigem HTTPS ou localhost. Publique pelo GitHub Pages ou use o Live Server.';
+    return;
+  }
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission === 'granted') {
+      state.notificationsEnabled = true;
+      help.textContent = 'Notificações ativadas. A previsão será verificada enquanto o site estiver aberto.';
+      if (state.weather) renderRainNotice(state.weather);
+    } else {
+      state.notificationsEnabled = false;
+      help.textContent = permission === 'denied' ? 'Permissão bloqueada. Altere as permissões deste site no navegador para ativar.' : 'Permissão não concedida. Você ainda pode acompanhar os avisos nesta página.';
+    }
+  } catch (error) {
+    help.textContent = 'Não foi possível ativar as notificações neste navegador.';
+  }
 }
 
 function renderPlace() {
@@ -607,6 +873,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // a cada 30 s: expira alertas vencidos e reavalia o aviso de dados desatualizados
   setInterval(() => { renderAlerts(); if (state.lastOk) renderUpdated(); }, 30000);
 
+  $('btn-rain-notifications').addEventListener('click', enableRainNotifications);
   $('btn-retry').addEventListener('click', () => {
     if (state.coords && state.weather) { showView('main'); refresh(); } else start();
   });

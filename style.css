@@ -152,10 +152,10 @@ main { flex: 1; padding-bottom: 28px; }
 #scene > g, #scene .cloud, #scene .hill { transition: opacity 1.2s ease, fill 1.2s ease; }
 .hill.h1 { fill: var(--hill1); } .hill.h2 { fill: var(--hill2); }
 .cloud { fill: var(--cloud); opacity: 0; }
-#sun, #moon, #stars, #rain, #snow, #hail, #bolt, #fog { opacity: 0; }
+#sun, #moon, #stars, #rain-drops, #snow, #hail, #bolt, #fog { opacity: 0; }
 #scene[data-sun="1"] #sun, #scene[data-moon="1"] #moon, #scene[data-stars="1"] #stars,
 #scene[data-bolt="1"] #bolt, #scene[data-fog="1"] #fog, #scene[data-hail="1"] #hail,
-#scene:not([data-rain="0"]) #rain, #scene[data-snow="1"] #snow { opacity: 1; }
+#scene:not([data-rain="0"]) #rain-drops, #scene[data-snow="1"] #snow { opacity: 1; }
 #scene[data-clouds="1"] .cd,
 #scene[data-clouds="2"] .cd, #scene[data-clouds="2"] .ca,
 #scene[data-clouds="3"] .cloud { opacity: 1; }
@@ -209,4 +209,72 @@ main { flex: 1; padding-bottom: 28px; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
   #bolt polygon { opacity: .9; }
   .drop { opacity: .7; transform: translate(-6px, 60px); }
+}
+
+
+/* ===== Recursos adicionais: mantém tokens, cartões e linguagem visual originais ===== */
+.extra-section { margin-top: 18px; display: grid; gap: 14px; }
+.section-heading { display: grid; gap: 3px; margin: 4px 0 2px; }
+.section-heading h2 { font-size: 1.2rem; font-weight: 750; }
+.section-heading p, .detail-copy, .data-disclaimer { color: var(--muted); font-size: .88rem; }
+.section-heading.compact { margin-bottom: 10px; }
+.forecast-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.forecast-card, .detail-panel, .recommendation-panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md); backdrop-filter: blur(10px); }
+.forecast-card { padding: 18px 20px; display: grid; gap: 8px; }
+.forecast-card h3 { font-size: 1rem; text-transform: capitalize; }
+.forecast-condition { color: var(--muted); font-size: .9rem; }
+.forecast-temps { font-size: 1.45rem; font-weight: 800; }
+.forecast-meta { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: .88rem; }
+.forecast-rain { color: #8bc7ff; font-weight: 700; }
+.detail-panel { padding: 18px 20px; }
+.hourly-rain { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; }
+.rain-hour { min-width: 0; text-align: center; padding: 10px 4px; background: rgba(120,150,190,.08); border: 1px solid var(--line); border-radius: var(--r-sm); }
+.rain-hour strong { display: block; font-size: .95rem; }
+.rain-hour span { display: block; color: var(--muted); font-size: .78rem; }
+.rain-hour .rain-percent { color: #8bc7ff; font-weight: 750; font-size: .9rem; }
+.environment-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.environment-card { min-height: 150px; align-content: start; }
+.environment-card .detail-copy { line-height: 1.45; }
+.data-disclaimer { margin-top: -4px; }
+.recommendation-panel { margin-top: 18px; padding: 20px 22px; display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; }
+.recommendation-icon { font-size: 2rem; }
+.recommendation-kicker { color: var(--muted); font-size: .8rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.recommendation-panel h2 { font-size: 1.2rem; margin: 2px 0 4px; }
+.recommendation-panel p:last-child { color: var(--muted); }
+.recommendation-panel[data-kind="beach"] { border-color: rgba(244,190,70,.55); }
+.recommendation-panel[data-kind="home"] { border-color: rgba(100,160,220,.55); }
+.recommendation-panel[data-kind="alert"] { border-color: #e5640a; }
+@media (max-width: 860px) {
+  .forecast-grid { grid-template-columns: 1fr 1fr; }
+  .environment-grid { grid-template-columns: 1fr 1fr; }
+  .hourly-rain { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 520px) {
+  .forecast-grid, .environment-grid { grid-template-columns: 1fr; }
+  .recommendation-panel { grid-template-columns: 1fr; }
+  .hourly-rain { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* ===== Alerta antecipado de chuva: mesma linguagem visual dos painéis ===== */
+.rain-notice-panel {
+  margin-top: 14px;
+  padding: 18px 20px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  backdrop-filter: blur(10px);
+}
+.rain-notice-panel h2 { font-size: 1.08rem; margin: 2px 0 4px; }
+.rain-notice-panel p:not(.recommendation-kicker) { color: var(--muted); font-size: .9rem; }
+.rain-notice-actions { display: grid; justify-items: end; gap: 5px; }
+.rain-notice-actions .btn { margin: 0; white-space: nowrap; }
+.notification-help { max-width: 34ch; text-align: right; font-size: .76rem !important; }
+@media (max-width: 700px) {
+  .rain-notice-panel { grid-template-columns: 1fr; }
+  .rain-notice-actions { justify-items: start; }
+  .notification-help { text-align: left; }
 }
